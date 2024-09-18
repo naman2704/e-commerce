@@ -50,40 +50,156 @@ export const createUser = async (req, res) => {
   }
 };
 
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = (await User.find()).filter((user) => user.role !== "admin");
+    const response =
+      users.length > 0
+        ? { status: 1, users }
+        : { status: 0, message: "No user exists" };
+    res.json(response);
+  } catch (error) {
+    res.json({
+      status: 0,
+      message: error.message,
+    });
+  }
+};
+
 export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-    let respone = {
+    let response = {
       status: 0,
       message: null,
     };
     if (!email) {
-      respone.message = "Email is required!";
+      response.message = "Email is required!";
     } else if (!password) {
-      respone.message = "Password is required!";
+      response.message = "Password is required!";
     }
-    if (respone.message) {
-      return res.status(400).json(respone);
+    if (response.message) {
+      return res.status(400).json(response);
     }
     const user = await User.findOne({ email });
     if (!user) {
-      respone.message = "No user found with this email.";
-      return res.status(401).json(respone);
+      response.message = "No user found with this email.";
+      return res.status(401).json(response);
     }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      respone.message = "Incorrect password.";
-      return res.status(401).json(respone);
+      response.message = "Incorrect password.";
+      return res.status(401).json(response);
     }
-    const token = jwt.sign({ userId: user._id }, "secret_key", {
-      expiresIn: "1d",
+    const { accessToken, refreshToken } = generateTokens(user);
+    response.status = 1;
+    response.message = "Logged in Successfully!";
+    res.status(200).json({
+      ...response,
+      user,
+      tokens: { accessToken, refreshToken },
+      expiresIn: timeToSeconds(process.env.ACCESS_TOKEN_EXPIRE_TIME),
+      expiresIn_: timeToSeconds(process.env.REFRESH_TOKEN_EXPIRE_TIME),
     });
-    respone.status = 1;
-    respone.message = "Logged in Successfully!";
-    res.status(200).json({ user, token });
   } catch (error) {
     res
-      .status(error?.status || 500)
+      .status(error?.status || 401)
       .json({ status: 0, message: error.message });
+  }
+};
+
+export const reLoginUser = async (req, res) => {
+  try {
+    const refreshToken = req.body.refreshToken;
+    let response = {
+      status: 0,
+      message: null,
+    };
+    const decodedToken = isTokenValid(refreshToken, "refresh_token");
+    if (decodedToken) {
+      const { userId } = decodedToken;
+      const user = await User.findById(userId);
+      const { accessToken, refreshToken } = generateTokens(user);
+      if (user?.role) {
+        response.status = 1;
+        response.message = "Re-Logged in Successfully!";
+        res.status(200).json({
+          ...response,
+          user,
+          tokens: { accessToken, refreshToken },
+          expiresIn: timeToSeconds(process.env.ACCESS_TOKEN_EXPIRE_TIME),
+          expiresIn_: timeToSeconds(process.env.REFRESH_TOKEN_EXPIRE_TIME),
+        });
+      }
+    }
+    res.json(response);
+  } catch (error) {
+    console.log("Error occured while relogging in!");
+    res.status(401).json({
+      status: 0,
+      message: "Re-login failed! Please login again",
+    });
+  }
+};
+
+export const getLoggedInUserInfo = async (req, res) => {
+  let response = {
+    status: 0,
+    message: null,
+  }
+  try {
+    const accessToken = req.body.accessToken;
+    if (accessToken) {
+      const decodedToken = isTokenValid(accessToken, "access_token");
+      const userId = decodedToken;
+      if (userId) {
+        const user = await User.findById(userId);
+        if (user?,role) {
+
+        }
+      }
+    }
+  } catch (error) {
+    
+  }
+}
+
+const generateTokens = (user) => {
+  const accessToken = jwt.sign(
+    { userId: user._id, role: user.role },
+    process.env.JWT_SECRET,
+    {
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRE_TIME,
+    }
+  );
+  const refreshToken = jwt.sign(
+    { userId: user._id, role: user.role },
+    process.env.REFRESH_TOKEN_SECRET,
+    {
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRE_TIME,
+    }
+  );
+  return { accessToken, refreshToken };
+};
+
+const isTokenValid = (token, tokenType = "access_token") => {
+  let secretKey = null;
+  switch (tokenType) {
+    case "access_token":
+      secretKey = process.env.JWT_SECRET;
+      break;
+    case "refresh_token":
+      secretKey = process.env.REFRESH_TOKEN_SECRET;
+      break;
+  }
+  if (secretKey) {
+    try {
+      const decoded = jwt.verify(token, secretKey); // Verifies the signature and expiration
+      console.log("Token is valid", decoded);
+      return decoded; // Return the decoded token if valid
+    } catch (error) {
+      console.error("Invalid token:", error.message);
+      return null; // Token is invalid
+    }
   }
 };

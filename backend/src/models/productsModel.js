@@ -8,12 +8,13 @@ const productSchema = new Schema({
   },
   image: {
     type: String,
-    required: true,
+    /* required: true, */
     trim: true,
   },
   description: {
     type: String,
     trim: true,
+    default: "No description available for this product",
   },
   price: {
     type: Number,

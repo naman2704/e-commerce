@@ -17,6 +17,15 @@ const userSchema = new Schema({
     trim: true,
     required: true,
   },
+  role: {
+    type: String,
+    trim: true,
+    default: "user",
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now /* Set the default value as the current date and time */,
+  },
 });
 
 const User = model("user", userSchema);
